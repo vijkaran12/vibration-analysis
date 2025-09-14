@@ -57,6 +57,7 @@ def health():
 
 # ----- Manual JSON Prediction -----
 # Manual prediction
+# Manual JSON Prediction
 @app.post("/predict")
 def predict(features: Features):
     try:
@@ -75,12 +76,14 @@ def predict(features: Features):
         }
 
         past_predictions.append(record)
-        return [record]  # ✅ top-level array
-    except Exception:
-        return []  # always an array
 
-# ----- CSV Prediction -----
-# CSV prediction
+        # ⚠️ Wrap in a dict with key 'predictions'
+        return {"predictions": [record]}
+    except Exception:
+        return {"predictions": []}
+
+
+# CSV Prediction
 @app.post("/predict_csv")
 async def predict_csv(file: UploadFile = File(...)):
     try:
@@ -88,10 +91,10 @@ async def predict_csv(file: UploadFile = File(...)):
         if df.shape[1] != model.n_features_in_:
             raise ValueError(f"Expected {model.n_features_in_} columns, got {df.shape[1]}")
 
-        predictions_list = []
         preds = model.predict(df)
         confidences = model.predict_proba(df).max(axis=1)
 
+        predictions_list = []
         for i, row in df.iterrows():
             record = {
                 "input": row.tolist(),
@@ -102,13 +105,16 @@ async def predict_csv(file: UploadFile = File(...)):
             predictions_list.append(record)
             past_predictions.append(record)
 
-        return predictions_list  # ✅ top-level array
+        # ⚠️ Wrap in a dict with key 'predictions'
+        return {"predictions": predictions_list}
     except Exception:
-        return []
+        return {"predictions": []}
 
-# ----- Past Predictions -----
-# Past predictions
+
+# Past Predictions
 @app.get("/past_predictions")
 def get_past_predictions():
-    return past_predictions  # ✅ top-level array
+    # ⚠️ Wrap in a dict with key 'history'
+    return {"history": past_predictions}
+
 
