@@ -26,9 +26,15 @@ app = FastAPI(
 # ----- Enable CORS -----
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL],
+    allow_origins=[
+        "https://b6aafef6-79b4-4f36-9131-57af75f8f983.sandbox.lovable.dev",
+        "https://lovable.dev",
+        "https://*.lovable.dev",
+        "http://localhost:3000",  # for local development
+        "*"  # Remove this in production, use specific domains
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
