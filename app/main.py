@@ -6,17 +6,21 @@ import pandas as pd
 from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
 
+
+frontend_url = "https://preview--vibe-sense-dash.lovable.app"
+
+
 # ----- Load Model -----
 with open("model/my_model.pkl", "rb") as f:
     model = pickle.load(f)
 
 # ----- Initialize FastAPI -----
 app = FastAPI()
-from fastapi.middleware.cors import CORSMiddleware
+
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Must be a list!
+    allow_origins=[frontend_url],  # Must be a list!
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
