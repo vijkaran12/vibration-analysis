@@ -115,4 +115,5 @@ async def predict_csv(file: UploadFile = File(...)):
 # ----- Past Predictions -----
 @app.get("/past_predictions", response_model=PastPredictionsResponse)
 def get_past_predictions():
-    return {"history": past_predictions}
+    return {"history": list(past_predictions)}  # ensures plain list
+
