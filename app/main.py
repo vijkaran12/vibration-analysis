@@ -4,6 +4,7 @@ import pickle
 import numpy as np
 import pandas as pd
 from datetime import datetime
+from fastapi.middleware.cors import CORSMiddleware
 
 # ----- Load Model -----
 with open("model/my_model.pkl", "rb") as f:
@@ -11,6 +12,16 @@ with open("model/my_model.pkl", "rb") as f:
 
 # ----- Initialize FastAPI -----
 app = FastAPI()
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Must be a list!
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # ----- In-memory storage for past predictions -----
 past_predictions = []
