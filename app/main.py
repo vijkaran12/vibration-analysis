@@ -9,7 +9,7 @@ from typing import List
 
 # ----- Config -----
 FRONTEND_URL = "https://preview--vibe-sense-dash.lovable.app"
-MODEL_PATH = "model/my_model.pkl"
+MODEL_PATH = "model/my1_model.pkl"
 
 # ----- Load Model -----
 with open(MODEL_PATH, "rb") as f:
