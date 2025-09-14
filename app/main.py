@@ -46,12 +46,6 @@ class CsvPrediction(BaseModel):
     confidence: float
     timestamp: str
 
-class CsvResponse(BaseModel):
-    predictions: List[CsvPrediction]
-
-class PastPredictionsResponse(BaseModel):
-    history: List[CsvPrediction]
-
 # ----- Root / Health -----
 @app.get("/")
 def root():
@@ -61,8 +55,8 @@ def root():
 def health():
     return {"status": "Server is running"}
 
-# ----- Manual JSON Prediction (Lovable-compatible) -----
-@app.post("/predict", response_model=CsvResponse)
+# ----- Manual JSON Prediction -----
+@app.post("/predict")
 def predict(features: Features):
     try:
         X = np.array(features.data).reshape(1, -1)
@@ -80,14 +74,13 @@ def predict(features: Features):
         )
         past_predictions.append(record.dict())
 
-        # Convert to dict before returning
-        return {"predictions": [record.dict()]}
+        # Return a plain list
+        return [record.dict()]
     except Exception as e:
-        return {"predictions": []}
-
+        return []
 
 # ----- CSV Prediction -----
-@app.post("/predict_csv", response_model=CsvResponse)
+@app.post("/predict_csv")
 async def predict_csv(file: UploadFile = File(...)):
     try:
         df = pd.read_csv(file.file)
@@ -105,15 +98,16 @@ async def predict_csv(file: UploadFile = File(...)):
                 confidence=float(confidences[i]),
                 timestamp=datetime.now().isoformat()
             )
-            predictions_list.append(record)
+            predictions_list.append(record.dict())
             past_predictions.append(record.dict())
 
-        return {"predictions": predictions_list}
+        # Return a plain list
+        return predictions_list
     except Exception as e:
-        return {"predictions": []}
+        return []
 
 # ----- Past Predictions -----
-@app.get("/past_predictions", response_model=PastPredictionsResponse)
+@app.get("/past_predictions")
 def get_past_predictions():
-    return {"history": list(past_predictions)}  # ensures plain list
-
+    # Return a plain list
+    return list(past_predictions)
