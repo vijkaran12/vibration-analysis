@@ -58,7 +58,7 @@ def predict(features: Features):
             raise ValueError(f"Expected {model.n_features_in_} features, got {X.shape[1]}")
 
         pred = str(model.predict(X)[0])
-        confidence = float(model.predict_proba(X).max() * 100)  # 0-100%
+        confidence = float(model.predict_proba(X).max())
 
         record = {
             "input": features.data,
@@ -68,11 +68,15 @@ def predict(features: Features):
         }
 
         past_predictions.append(record)
-
-        return {"predictions": [record]}  # ✅ Lovable expects this key
-    except Exception as e:
-        # Always return array even on error
-        return {"predictions": []}
+        return [record]  # ✅ Top-level array for Lovable
+    except Exception:
+        # Always return an array even on error
+        return [{
+            "input": features.data,
+            "prediction": "error",
+            "confidence": 0.0,
+            "timestamp": datetime.now().isoformat()
+        }]
 
 # ----- CSV Prediction -----
 @app.post("/predict_csv")
@@ -83,7 +87,7 @@ async def predict_csv(file: UploadFile = File(...)):
             raise ValueError(f"Expected {model.n_features_in_} columns, got {df.shape[1]}")
 
         preds = model.predict(df)
-        confidences = model.predict_proba(df).max(axis=1) * 100  # 0-100%
+        confidences = model.predict_proba(df).max(axis=1)
 
         predictions_list = []
         for i, row in df.iterrows():
@@ -96,11 +100,11 @@ async def predict_csv(file: UploadFile = File(...)):
             predictions_list.append(record)
             past_predictions.append(record)
 
-        return {"predictions": predictions_list}
-    except Exception as e:
-        return {"predictions": []}
+        return predictions_list  # ✅ Top-level array
+    except Exception:
+        return []
 
 # ----- Past Predictions -----
 @app.get("/past_predictions")
 def get_past_predictions():
-    return {"history": past_predictions}  # ✅ top-level object
+    return list(past_predictions)  # ✅ Top-level array
