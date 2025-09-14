@@ -15,6 +15,8 @@ MODEL_PATH = "model/my_model.pkl"
 with open(MODEL_PATH, "rb") as f:
     model = pickle.load(f)
 
+EXPECTED_FEATURES = model.n_features_in_  # Should be 9 for your RF
+
 # ----- Initialize FastAPI -----
 app = FastAPI(
     title="Vibration Prediction API",
@@ -34,13 +36,13 @@ app.add_middleware(
 )
 
 # ----- In-memory storage -----
-past_predictions: List[dict] = []
+past_predictions = []
 
 # ----- Schemas -----
 class Features(BaseModel):
     data: List[float]
 
-class PredictionRecord(BaseModel):
+class CsvPrediction(BaseModel):
     input: List[float]
     prediction: str
     confidence: float
@@ -60,56 +62,53 @@ def health():
 def predict(features: Features):
     try:
         X = np.array(features.data).reshape(1, -1)
-        if X.shape[1] != model.n_features_in_:
-            raise ValueError(f"Expected {model.n_features_in_} features, got {X.shape[1]}")
+        if X.shape[1] != EXPECTED_FEATURES:
+            return [{"error": f"Expected {EXPECTED_FEATURES} features, got {X.shape[1]}"}]
 
         pred = str(model.predict(X)[0])
         confidence = float(model.predict_proba(X).max())
 
-        record = PredictionRecord(
-            input=features.data,
-            prediction=pred,
-            confidence=confidence,
-            timestamp=datetime.now().isoformat()
-        )
-        # Always append dict
-        past_predictions.append(record.dict())
+        record = {
+            "input": features.data,
+            "prediction": pred,
+            "confidence": confidence,
+            "timestamp": datetime.now().isoformat()
+        }
 
-        # Return top-level array as Lovable expects
-        return [record.dict()]
-    except Exception:
-        # Always return an array
-        return []
+        past_predictions.append(record)
+        return [record]  # Top-level array for Lovable
+
+    except Exception as e:
+        return [{"error": str(e)}]
 
 # ----- CSV Prediction -----
 @app.post("/predict_csv")
 async def predict_csv(file: UploadFile = File(...)):
     try:
         df = pd.read_csv(file.file)
-        if df.shape[1] != model.n_features_in_:
-            raise ValueError(f"Expected {model.n_features_in_} columns, got {df.shape[1]}")
+        if df.shape[1] != EXPECTED_FEATURES:
+            return [{"error": f"Expected {EXPECTED_FEATURES} columns, got {df.shape[1]}"}]
 
         preds = model.predict(df)
         confidences = model.predict_proba(df).max(axis=1)
 
         predictions_list = []
         for i, row in df.iterrows():
-            record = PredictionRecord(
-                input=row.tolist(),
-                prediction=str(preds[i]),
-                confidence=float(confidences[i]),
-                timestamp=datetime.now().isoformat()
-            )
-            predictions_list.append(record.dict())
-            past_predictions.append(record.dict())
+            record = {
+                "input": row.tolist(),
+                "prediction": str(preds[i]),
+                "confidence": float(confidences[i]),
+                "timestamp": datetime.now().isoformat()
+            }
+            predictions_list.append(record)
+            past_predictions.append(record)
 
-        # Return top-level array
-        return predictions_list
-    except Exception:
-        return []
+        return predictions_list  # Top-level array for Lovable
+
+    except Exception as e:
+        return [{"error": str(e)}]
 
 # ----- Past Predictions -----
 @app.get("/past_predictions")
 def get_past_predictions():
-    # Return a plain list of dicts
-    return [p for p in past_predictions]
+    return past_predictions  # Top-level array
