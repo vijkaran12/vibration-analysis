@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
 import pickle
-import numpy as np
 import pandas as pd
+import numpy as np
 from typing import List
 
 # ----- Config -----
@@ -15,7 +15,8 @@ MODEL_PATH = "model/my1_model.pkl"
 with open(MODEL_PATH, "rb") as f:
     model = pickle.load(f)
 
-EXPECTED_FEATURES = model.n_features_in_
+EXPECTED_FEATURES = model.n_features_in_  # number of features your model expects
+FEATURE_NAMES = model.feature_names_in_   # IMPORTANT: feature names the model was trained on
 
 # ----- Initialize FastAPI -----
 app = FastAPI()
@@ -36,25 +37,20 @@ past_predictions = []
 class Features(BaseModel):
     data: List[float]
 
-# ----- Helper function for safe confidence -----
-def get_confidence(proba_array: np.ndarray) -> float:
-    # If single-class model, return 1.0
-    if proba_array.shape[1] == 1:
-        return 1.0
-    return float(proba_array.max())
-
 # ----- Manual JSON Prediction -----
 @app.post("/predict")
 def predict(features: Features):
     if len(features.data) != EXPECTED_FEATURES:
         raise HTTPException(
             status_code=400,
-            detail=f"Expected {EXPECTED_FEATURES} features, got {len(features.data)}"
+            detail=f"Invalid feature count. Expected {EXPECTED_FEATURES}, got {len(features.data)}"
         )
+    
+    # Convert to DataFrame with feature names
+    X = pd.DataFrame([features.data], columns=FEATURE_NAMES)
 
-    X = np.array(features.data, dtype=float).reshape(1, -1)
     pred = str(model.predict(X)[0])
-    confidence = get_confidence(model.predict_proba(X))
+    confidence = float(model.predict_proba(X).max())
 
     record = {
         "input": features.data,
@@ -72,19 +68,21 @@ async def predict_csv(file: UploadFile = File(...)):
     if df.shape[1] != EXPECTED_FEATURES:
         raise HTTPException(
             status_code=400,
-            detail=f"Expected {EXPECTED_FEATURES} columns, got {df.shape[1]}"
+            detail=f"Invalid CSV columns. Expected {EXPECTED_FEATURES}, got {df.shape[1]}"
         )
 
+    # Ensure correct feature names
+    df.columns = FEATURE_NAMES
+
     preds = model.predict(df)
-    probas = model.predict_proba(df)
+    confidences = model.predict_proba(df).max(axis=1)
 
     predictions_list = []
     for i, row in df.iterrows():
-        confidence = get_confidence(probas[i].reshape(1, -1))
         record = {
             "input": row.tolist(),
             "prediction": str(preds[i]),
-            "confidence": confidence,
+            "confidence": float(confidences[i]),
             "timestamp": datetime.now().isoformat()
         }
         predictions_list.append(record)
@@ -95,4 +93,4 @@ async def predict_csv(file: UploadFile = File(...)):
 # ----- Past Predictions -----
 @app.get("/past_predictions")
 def get_past_predictions():
-    return past_predictions  # top-level array
+    return past_predictions  # always top-level array
