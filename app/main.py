@@ -80,10 +80,11 @@ def predict(features: Features):
         )
         past_predictions.append(record.dict())
 
-        # Return as an array even for single prediction
-        return {"predictions": [record]}
+        # Convert to dict before returning
+        return {"predictions": [record.dict()]}
     except Exception as e:
         return {"predictions": []}
+
 
 # ----- CSV Prediction -----
 @app.post("/predict_csv", response_model=CsvResponse)
