@@ -56,6 +56,7 @@ def health():
     return {"status": "Server is running"}
 
 # ----- Manual JSON Prediction -----
+# Manual prediction
 @app.post("/predict")
 def predict(features: Features):
     try:
@@ -66,21 +67,20 @@ def predict(features: Features):
         pred = str(model.predict(X)[0])
         confidence = float(model.predict_proba(X).max())
 
-        record = CsvPrediction(
-            input=features.data,
-            prediction=pred,
-            confidence=confidence,
-            timestamp=datetime.now().isoformat()
-        )
-        past_predictions.append(record.dict())
+        record = {
+            "input": features.data,
+            "prediction": pred,
+            "confidence": confidence,
+            "timestamp": datetime.now().isoformat()
+        }
 
-        # Return a plain list
-        return [record.dict()]
-    except Exception as e:
-        # Always return a list, even on error
-        return []
+        past_predictions.append(record)
+        return [record]  # ✅ top-level array
+    except Exception:
+        return []  # always an array
 
 # ----- CSV Prediction -----
+# CSV prediction
 @app.post("/predict_csv")
 async def predict_csv(file: UploadFile = File(...)):
     try:
@@ -88,26 +88,27 @@ async def predict_csv(file: UploadFile = File(...)):
         if df.shape[1] != model.n_features_in_:
             raise ValueError(f"Expected {model.n_features_in_} columns, got {df.shape[1]}")
 
+        predictions_list = []
         preds = model.predict(df)
         confidences = model.predict_proba(df).max(axis=1)
 
-        predictions_list = []
         for i, row in df.iterrows():
-            record = CsvPrediction(
-                input=row.tolist(),
-                prediction=str(preds[i]),
-                confidence=float(confidences[i]),
-                timestamp=datetime.now().isoformat()
-            )
-            predictions_list.append(record.dict())
-            past_predictions.append(record.dict())
+            record = {
+                "input": row.tolist(),
+                "prediction": str(preds[i]),
+                "confidence": float(confidences[i]),
+                "timestamp": datetime.now().isoformat()
+            }
+            predictions_list.append(record)
+            past_predictions.append(record)
 
-        # Return a plain list
-        return predictions_list
-    except Exception as e:
+        return predictions_list  # ✅ top-level array
+    except Exception:
         return []
 
 # ----- Past Predictions -----
+# Past predictions
 @app.get("/past_predictions")
 def get_past_predictions():
-    return list(past_predictions)  # always a plain list
+    return past_predictions  # ✅ top-level array
+
