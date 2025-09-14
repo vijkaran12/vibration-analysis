@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
@@ -15,16 +15,10 @@ MODEL_PATH = "model/my_model.pkl"
 with open(MODEL_PATH, "rb") as f:
     model = pickle.load(f)
 
-EXPECTED_FEATURES = model.n_features_in_  # Should be 9 for your RF
+EXPECTED_FEATURES = model.n_features_in_  # number of features your model expects
 
 # ----- Initialize FastAPI -----
-app = FastAPI(
-    title="Vibration Prediction API",
-    version="1.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json"
-)
+app = FastAPI()
 
 # ----- Enable CORS -----
 app.add_middleware(
@@ -42,13 +36,7 @@ past_predictions = []
 class Features(BaseModel):
     data: List[float]
 
-class CsvPrediction(BaseModel):
-    input: List[float]
-    prediction: str
-    confidence: float
-    timestamp: str
-
-# ----- Root / Health -----
+# ----- Endpoints -----
 @app.get("/")
 def root():
     return {"message": "Welcome to the Prediction API"}
@@ -57,58 +45,51 @@ def root():
 def health():
     return {"status": "Server is running"}
 
-# ----- Manual JSON Prediction -----
 @app.post("/predict")
 def predict(features: Features):
-    try:
-        X = np.array(features.data).reshape(1, -1)
-        if X.shape[1] != EXPECTED_FEATURES:
-            return [{"error": f"Expected {EXPECTED_FEATURES} features, got {X.shape[1]}"}]
+    if len(features.data) != EXPECTED_FEATURES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid feature count. Expected {EXPECTED_FEATURES}, got {len(features.data)}"
+        )
+    X = np.array(features.data).reshape(1, -1)
+    pred = str(model.predict(X)[0])
+    confidence = float(model.predict_proba(X).max())
 
-        pred = str(model.predict(X)[0])
-        confidence = float(model.predict_proba(X).max())
+    record = {
+        "input": features.data,
+        "prediction": pred,
+        "confidence": confidence,
+        "timestamp": datetime.now().isoformat()
+    }
+    past_predictions.append(record)
+    return [record]  # always return a list
 
-        record = {
-            "input": features.data,
-            "prediction": pred,
-            "confidence": confidence,
-            "timestamp": datetime.now().isoformat()
-        }
-
-        past_predictions.append(record)
-        return [record]  # Top-level array for Lovable
-
-    except Exception as e:
-        return [{"error": str(e)}]
-
-# ----- CSV Prediction -----
 @app.post("/predict_csv")
 async def predict_csv(file: UploadFile = File(...)):
-    try:
-        df = pd.read_csv(file.file)
-        if df.shape[1] != EXPECTED_FEATURES:
-            return [{"error": f"Expected {EXPECTED_FEATURES} columns, got {df.shape[1]}"}]
+    df = pd.read_csv(file.file)
+    if df.shape[1] != EXPECTED_FEATURES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid CSV columns. Expected {EXPECTED_FEATURES}, got {df.shape[1]}"
+        )
 
-        preds = model.predict(df)
-        confidences = model.predict_proba(df).max(axis=1)
+    preds = model.predict(df)
+    confidences = model.predict_proba(df).max(axis=1)
 
-        predictions_list = []
-        for i, row in df.iterrows():
-            record = {
-                "input": row.tolist(),
-                "prediction": str(preds[i]),
-                "confidence": float(confidences[i]),
-                "timestamp": datetime.now().isoformat()
-            }
-            predictions_list.append(record)
-            past_predictions.append(record)
+    predictions_list = []
+    for i, row in df.iterrows():
+        record = {
+            "input": row.tolist(),
+            "prediction": str(preds[i]),
+            "confidence": float(confidences[i]),
+            "timestamp": datetime.now().isoformat()
+        }
+        predictions_list.append(record)
+        past_predictions.append(record)
 
-        return predictions_list  # Top-level array for Lovable
+    return predictions_list  # always a list
 
-    except Exception as e:
-        return [{"error": str(e)}]
-
-# ----- Past Predictions -----
 @app.get("/past_predictions")
 def get_past_predictions():
-    return past_predictions  # Top-level array
+    return past_predictions  # always a list
