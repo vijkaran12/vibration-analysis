@@ -40,10 +40,6 @@ past_predictions = []
 class Features(BaseModel):
     data: List[float]
 
-class PredictResponse(BaseModel):
-    prediction: str
-    confidence: float
-
 class CsvPrediction(BaseModel):
     input: List[float]
     prediction: str
@@ -65,8 +61,8 @@ def root():
 def health():
     return {"status": "Server is running"}
 
-# ----- Manual JSON Prediction -----
-@app.post("/predict", response_model=PredictResponse)
+# ----- Manual JSON Prediction (Lovable-compatible) -----
+@app.post("/predict", response_model=CsvResponse)
 def predict(features: Features):
     try:
         X = np.array(features.data).reshape(1, -1)
@@ -76,18 +72,18 @@ def predict(features: Features):
         pred = str(model.predict(X)[0])
         confidence = float(model.predict_proba(X).max())
 
-        # Store prediction
-        record = {
-            "input": features.data,
-            "prediction": pred,
-            "confidence": confidence,
-            "timestamp": datetime.now().isoformat()
-        }
-        past_predictions.append(record)
+        record = CsvPrediction(
+            input=features.data,
+            prediction=pred,
+            confidence=confidence,
+            timestamp=datetime.now().isoformat()
+        )
+        past_predictions.append(record.dict())
 
-        return {"prediction": pred, "confidence": confidence}
+        # Return as an array even for single prediction
+        return {"predictions": [record]}
     except Exception as e:
-        return {"prediction": "error", "confidence": 0.0}
+        return {"predictions": []}
 
 # ----- CSV Prediction -----
 @app.post("/predict_csv", response_model=CsvResponse)
