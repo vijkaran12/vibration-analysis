@@ -17,6 +17,7 @@ with open(MODEL_PATH, "rb") as f:
 
 EXPECTED_FEATURES = model.n_features_in_  # number of features your model expects
 
+
 # ----- Initialize FastAPI -----
 app = FastAPI()
 
@@ -52,7 +53,7 @@ def predict(features: Features):
             status_code=400,
             detail=f"Invalid feature count. Expected {EXPECTED_FEATURES}, got {len(features.data)}"
         )
-    X = np.array(features.data).reshape(1, -1)
+    X = np.array(features.data , dtype=float).reshape(1, -1)
     pred = str(model.predict(X)[0])
     confidence = float(model.predict_proba(X).max())
 
