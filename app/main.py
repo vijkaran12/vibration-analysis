@@ -53,7 +53,7 @@ def health():
 @app.post("/predict")
 def predict(features: Features):
     try:
-        X = np.array(features.data).reshape(1, -1)
+        X = np.array([float(x) for x in features.data]).reshape(1, -1)
         if X.shape[1] != model.n_features_in_:
             raise ValueError(f"Expected {model.n_features_in_} features, got {X.shape[1]}")
 
@@ -61,28 +61,27 @@ def predict(features: Features):
         confidence = float(model.predict_proba(X).max())
 
         record = {
-            "input": features.data,
+            "input": [float(x) for x in features.data],
             "prediction": pred,
             "confidence": confidence,
             "timestamp": datetime.now().isoformat()
         }
 
         past_predictions.append(record)
-        return [record]  # ✅ Top-level array for Lovable
+
+        # Return as top-level array
+        return [record]
+
     except Exception:
-        # Always return an array even on error
-        return [{
-            "input": features.data,
-            "prediction": "error",
-            "confidence": 0.0,
-            "timestamp": datetime.now().isoformat()
-        }]
+        # Always return an array
+        return []
 
 # ----- CSV Prediction -----
 @app.post("/predict_csv")
 async def predict_csv(file: UploadFile = File(...)):
     try:
         df = pd.read_csv(file.file)
+
         if df.shape[1] != model.n_features_in_:
             raise ValueError(f"Expected {model.n_features_in_} columns, got {df.shape[1]}")
 
@@ -92,7 +91,7 @@ async def predict_csv(file: UploadFile = File(...)):
         predictions_list = []
         for i, row in df.iterrows():
             record = {
-                "input": row.tolist(),
+                "input": [float(x) for x in row.tolist()],
                 "prediction": str(preds[i]),
                 "confidence": float(confidences[i]),
                 "timestamp": datetime.now().isoformat()
@@ -100,11 +99,20 @@ async def predict_csv(file: UploadFile = File(...)):
             predictions_list.append(record)
             past_predictions.append(record)
 
-        return predictions_list  # ✅ Top-level array
+        return predictions_list  # top-level array
+
     except Exception:
-        return []
+        return []  # always top-level array
 
 # ----- Past Predictions -----
 @app.get("/past_predictions")
 def get_past_predictions():
-    return list(past_predictions)  # ✅ Top-level array
+    # return top-level array with proper types
+    return [
+        {
+            "input": [float(x) for x in p["input"]],
+            "prediction": str(p["prediction"]),
+            "confidence": float(p["confidence"]),
+            "timestamp": str(p["timestamp"])
+        } for p in past_predictions
+    ]
