@@ -77,6 +77,7 @@ def predict(features: Features):
         # Return a plain list
         return [record.dict()]
     except Exception as e:
+        # Always return a list, even on error
         return []
 
 # ----- CSV Prediction -----
@@ -109,5 +110,4 @@ async def predict_csv(file: UploadFile = File(...)):
 # ----- Past Predictions -----
 @app.get("/past_predictions")
 def get_past_predictions():
-    # Return a plain list
-    return list(past_predictions)
+    return list(past_predictions)  # always a plain list
