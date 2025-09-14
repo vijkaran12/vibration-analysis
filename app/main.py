@@ -1,13 +1,14 @@
 from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from datetime import datetime
 import pickle
 import numpy as np
 import pandas as pd
-from datetime import datetime
-from fastapi.middleware.cors import CORSMiddleware
+from typing import List
 
 # ----- Config -----
-frontend_url = "https://preview--vibe-sense-dash.lovable.app"
+FRONTEND_URL = "https://preview--vibe-sense-dash.lovable.app"
 MODEL_PATH = "model/my_model.pkl"
 
 # ----- Load Model -----
@@ -15,25 +16,47 @@ with open(MODEL_PATH, "rb") as f:
     model = pickle.load(f)
 
 # ----- Initialize FastAPI -----
-app = FastAPI()
+app = FastAPI(
+    title="Vibration Prediction API",
+    version="1.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json"
+)
 
 # ----- Enable CORS -----
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[frontend_url],  # allow your Lovable frontend
+    allow_origins=[FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ----- In-memory storage for past predictions -----
+# ----- In-memory storage -----
 past_predictions = []
 
-# ----- JSON Input Schema -----
+# ----- Schemas -----
 class Features(BaseModel):
-    data: list[float]  # e.g., [0.23, 0.87, 0.12, 3.45]
+    data: List[float]
 
-# ----- Root / Health Endpoints -----
+class PredictResponse(BaseModel):
+    prediction: str
+    confidence: float
+
+class CsvPrediction(BaseModel):
+    input: List[float]
+    prediction: str
+    confidence: float
+    timestamp: str
+
+class CsvResponse(BaseModel):
+    predictions: List[CsvPrediction]
+
+class PastPredictionsResponse(BaseModel):
+    history: List[CsvPrediction]
+
+# ----- Root / Health -----
 @app.get("/")
 def root():
     return {"message": "Welcome to the Prediction API"}
@@ -42,61 +65,57 @@ def root():
 def health():
     return {"status": "Server is running"}
 
-# ----- JSON Prediction Endpoint -----
-@app.post("/predict")
+# ----- Manual JSON Prediction -----
+@app.post("/predict", response_model=PredictResponse)
 def predict(features: Features):
     try:
         X = np.array(features.data).reshape(1, -1)
         if X.shape[1] != model.n_features_in_:
-            return {"error": f"Expected {model.n_features_in_} features, got {X.shape[1]}"}
-        
-        pred = model.predict(X)[0]
-        proba = float(model.predict_proba(X).max())  # convert to Python float
+            raise ValueError(f"Expected {model.n_features_in_} features, got {X.shape[1]}")
+
+        pred = str(model.predict(X)[0])
+        confidence = float(model.predict_proba(X).max())
 
         # Store prediction
         record = {
-            "type": "json",
             "input": features.data,
-            "prediction": str(pred),
-            "confidence": proba,
+            "prediction": pred,
+            "confidence": confidence,
             "timestamp": datetime.now().isoformat()
         }
         past_predictions.append(record)
 
-        # Wrap in top-level "result" key for Lovable
-        return {"status": "success", "result": {"prediction": str(pred), "confidence": proba}}
-
+        return {"prediction": pred, "confidence": confidence}
     except Exception as e:
-        return {"error": str(e)}
+        return {"prediction": "error", "confidence": 0.0}
 
-
-# ----- CSV Prediction Endpoint -----
-@app.post("/predict_csv")
+# ----- CSV Prediction -----
+@app.post("/predict_csv", response_model=CsvResponse)
 async def predict_csv(file: UploadFile = File(...)):
     try:
         df = pd.read_csv(file.file)
         if df.shape[1] != model.n_features_in_:
-            return {"error": f"Expected {model.n_features_in_} columns, got {df.shape[1]}"}
-        
+            raise ValueError(f"Expected {model.n_features_in_} columns, got {df.shape[1]}")
+
         preds = model.predict(df)
-        probas = model.predict_proba(df).max(axis=1)
-        results = df.copy()
-        results["prediction"] = preds
-        results["confidence"] = probas
-        results["timestamp"] = datetime.now().isoformat()
+        confidences = model.predict_proba(df).max(axis=1)
 
-        # Store past predictions
-        for _, row in results.iterrows():
-            past_predictions.append({
-                "type": "csv",
-                "input": row[df.columns].tolist(),
-                "prediction": row["prediction"],
-                "confidence": row["confidence"],
-                "timestamp": row["timestamp"]
-            })
+        predictions_list = []
+        for i, row in df.iterrows():
+            record = CsvPrediction(
+                input=row.tolist(),
+                prediction=str(preds[i]),
+                confidence=float(confidences[i]),
+                timestamp=datetime.now().isoformat()
+            )
+            predictions_list.append(record)
+            past_predictions.append(record.dict())
 
-        # Wrap in a top-level object for Lovable
-        return {"status": "success", "predictions": results.to_dict(orient="records")}
-
+        return {"predictions": predictions_list}
     except Exception as e:
-        return {"error": str(e)}
+        return {"predictions": []}
+
+# ----- Past Predictions -----
+@app.get("/past_predictions", response_model=PastPredictionsResponse)
+def get_past_predictions():
+    return {"history": past_predictions}
