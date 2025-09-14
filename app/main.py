@@ -51,7 +51,7 @@ def predict(features: Features):
             return {"error": f"Expected {model.n_features_in_} features, got {X.shape[1]}"}
         
         pred = model.predict(X)[0]
-        proba = float(model.predict_proba(X).max())
+        proba = float(model.predict_proba(X).max())  # convert to Python float
 
         # Store prediction
         record = {
@@ -63,9 +63,12 @@ def predict(features: Features):
         }
         past_predictions.append(record)
 
-        return {"prediction": str(pred), "confidence": proba}
+        # Wrap in top-level "result" key for Lovable
+        return {"status": "success", "result": {"prediction": str(pred), "confidence": proba}}
+
     except Exception as e:
         return {"error": str(e)}
+
 
 # ----- CSV Prediction Endpoint -----
 @app.post("/predict_csv")
@@ -92,11 +95,8 @@ async def predict_csv(file: UploadFile = File(...)):
                 "timestamp": row["timestamp"]
             })
 
-        return results.to_dict(orient="records")
+        # Wrap in a top-level object for Lovable
+        return {"status": "success", "predictions": results.to_dict(orient="records")}
+
     except Exception as e:
         return {"error": str(e)}
-
-# ----- Get Past Predictions -----
-@app.get("/past_predictions")
-def get_past_predictions():
-    return past_predictions
